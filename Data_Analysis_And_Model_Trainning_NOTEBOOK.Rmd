@@ -1,0 +1,677 @@
+Torch Library for CNN creation (accept gather binaries if first time executing)
+(Additional software download must be accepted)
+```{r}
+#install.packages("torch")
+#install.packages("torchvision")
+#install.packages("ggplot2")
+#install.packages("jpeg")
+#install.packages("magick")
+#install.packages("dplyr")
+packages <- c("torch","torchvision","ggplot2","jpeg","magick","dplyr")
+### WARNING, ACCEPT EXTRA DATA FOR TORCH PACKAGE INCLUDE ###
+for(package in packages){
+  if (!require(package, character.only = TRUE)) {
+    install.packages(package)
+    library(package, character.only = TRUE)
+  } else {
+    library(package, character.only = TRUE)
+  }
+}
+
+#install.packages("e1071")
+#install.packages("caret") 
+#install.packages("ROSE") 
+#install.packages("randomForest")
+
+```
+#Library includes and workspace selection
+```{r}
+#library(torch) #Ver ‘0.11.0.9002’
+#library(torchvision) #Ver ‘0.5.1’
+#library(ggplot2)
+#library(jpeg)
+#library(magick)
+#library(dplyr)
+
+
+setwd("C:/Users/Alber/OneDrive/Escritorio/Protoype/Skin_Cancer_Net/")
+df <- read.csv('Dataset/HAM10000_metadata.csv');
+```
+
+#Dataset loading and data visualization
+
+```{r}
+#Check general overview
+cat("----SUMMARY------")
+cat("\n")
+summary(df)
+cat("\n")
+cat("----DATA_EXAMPLE-----")
+cat("\n")
+str(df)
+cat("\n")
+cat("----UNIQUE_VALS-----")
+cat("\n")
+cat("\n")
+for (col in names(df[,])) {
+  if(col!="image_id" && col!="lesion_id"){
+    cat("Unique values", col, ":\n")
+    print(unique(df[[col]]))
+    cat("\n")
+  }
+}
+```
+
+#Data cleaning
+
+```{r}
+#For analysis purpose will quit NA values on "age" attribute and "Unknown" values on "sex" attrubute
+df_clean <- df[df$sex!="unknown", ]
+df_clean <- df_clean[!is.na(df_clean$age), ]
+
+#Arrange as lession type frequency, since its the target attribute
+df_clean <- df_clean %>%
+  arrange(dx)
+
+#Rewatch summary
+summary(df_clean)
+```
+#Check lesion classes distribution per age and sex
+```{r}
+# Vector con los diagnósticos
+classes <- c("akiec", "bcc", "bkl", "df", "mel", "nv", "vasc")
+
+# Crear y guardar los gráficos en una lista
+aesthetics_list <- list()
+
+for (class in classes) {
+  # Filter data for keeping age and sex distributions
+  df_filtrado <- df_clean[df_clean$dx == class, c("age", "sex")]
+  
+  # Crate a list of aesthetics
+  aesthetics_list[[class]] <- ggplot(df_filtrado, aes(x = age, fill = sex)) +
+    geom_bar(position = "dodge", color = "black") +
+    geom_text(stat = 'count', aes(label = after_stat(count)), vjust = -0.5,  hjust=0.3, size = 2.5) +
+    labs(title = paste("Age Distribution -", class), x = "Age", y = "Count") +
+    theme(axis.text.x = element_text(angle = 0, vjust = 0.5),
+          axis.title = element_text(size = 14, face = "bold"),
+          plot.title = element_text(size = 16, face = "bold")) +
+    scale_fill_brewer(palette = "Blues") +
+    guides(fill = guide_legend(title = "Sex")) +
+    coord_cartesian(clip = "off") 
+    #theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+     #     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))
+}
+
+aesthetics_list
+
+```
+
+#Check age for outliers
+
+```{r}
+ggplot(df_clean, aes(y = age)) +
+  geom_boxplot(color="red") +
+  labs(title = "Age outliers", y = "Range") +
+  theme(axis.text.x = element_text(angle = 0, vjust = 0.5),
+          axis.title = element_text(size = 14, face = "bold"),
+          plot.title = element_text(size = 16, face = "bold")) 
+#Appears to not be worrying outliers, theres some newborns, but that should not be a problem for further analysis
+#Also, the data appears to be more concentrated in range 40 to 65
+```
+
+
+#Check sex, age and class distribution
+```{r}
+# visualize sexs proportion
+ggplot(df_clean, aes(x = sex)) +
+  geom_bar(fill = "skyblue", color = "black") +
+  geom_text(stat = 'count', aes(label = after_stat(count)), vjust = -0.5) +
+  labs(title = "Sex proportion", x = "Sex", y = "Quantity")+
+  ylim(0, 7000)
+
+# visualize ages proportion
+ggplot(df_clean, aes(x = age)) +
+  geom_bar(fill = "skyblue", color = "black") +
+  geom_text(stat = 'count', aes(label = after_stat(count)), vjust = -0.5) +
+  labs(title = "Age proportion", x = "Age", y = "Quantity")+
+  ylim(0, 1500)
+
+# visualize classes proportion
+ggplot(df_clean, aes(x = dx)) +
+  geom_bar(fill = "skyblue", color = "black") +
+  geom_text(stat = 'count', aes(label = after_stat(count)), vjust = -0.5) +
+  labs(title = "Class proportion", x = "DX class", y = "Quantity")+
+  ylim(0, 7000)
+
+```
+
+
+
+#Check class distribution per localization
+
+```{r}
+# Lession classes
+classes <- c("akiec", "bcc", "bkl", "df", "mel", "nv", "vasc")
+
+# Create aesthetics list for plotting
+aesthetics_list <- list()
+
+for (class in classes) {
+  # Filter data for keeping age and sex distributions
+  df_filtrado <- df_clean[df_clean$dx == class, c("localization","age")]
+  
+  # Crate a list of aesthetics
+  aesthetics_list[[class]] <- ggplot(df_filtrado, aes(x = localization)) +
+    geom_bar(position = "dodge", color = "black") +
+    geom_text(stat = 'count', aes(label = after_stat(count)), vjust = -0.5,  hjust=0.3, size = 2.5) +
+    labs(title = paste("Localization Distribution -", class), x = "Localization") +
+    theme(axis.text.x = element_text(angle = 0, vjust = 0.5),
+          axis.title = element_text(size = 14, face = "bold"),
+          plot.title = element_text(size = 16, face = "bold")) +
+    scale_fill_brewer(palette = "Blues") +
+    guides(fill = guide_legend(title = "Sex")) +
+    coord_cartesian(clip = "off") 
+    #theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+     #     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))
+}
+
+aesthetics_list
+```
+
+#Percentage proportion
+```{r}
+
+#For lession type
+percentage_data <- df_clean %>%
+  count(dx) %>%
+  mutate(percentage = prop.table(n) * 100)
+
+ggplot(percentage_data, aes(x = dx, y = percentage)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            vjust = -0.5, size = 3, color = "black") +
+  labs(title = "Histograma con porcentaje en cada barra", 
+       x = "Valores", y = "Porcentaje") +
+  theme_minimal()
+```
+#Possible lineal relation analysis
+
+```{r}
+#Label encode sex as male=1 and female =2
+df_clean_encoded <- df_clean
+df_clean_encoded$localization <- as.numeric(factor(df_clean$localization))
+
+ggplot(df_clean_encoded, aes(x = age, y = dx, color=localization, size=sex)) +
+  geom_point(size = 4) +
+  scale_color_gradient(low = "blue", high = "red") +
+  labs(title = "Gráfico de dispersión", x = "Variable 1", y = "Variable 2", color = "Valor")
+```
+
+
+
+#Images identification and sorting JUST RUN ONCE IF YOU HACE THE DATA
+
+```{r}
+#Sort images into new directories named as their respective labels
+Source_images <- "Dataset/HAM10000_images";
+available_classes = unique(df$dx);
+
+files <- list.files(Source_images)
+
+# Copy all the files into their respective directories
+target_dir <- 'Dataset/HAM_Sorted';
+if (!dir.exists(target_dir)){
+  dir.create(target_dir)
+}
+for (class in available_classes){
+  #if not exists create directory for the class
+  #if exists, then this process will be assumed and skipped
+  sub_class_dir <- paste0(target_dir,'/',class,'/');
+  if (!dir.exists(sub_class_dir)) {
+    dir.create(sub_class_dir)
+    #List all the class files
+    current_class_image <- df[df$dx == class, ];
+    current_class_image <- current_class_image$image_id;
+    for (current_image in current_class_image) {
+      current_image_dir <- paste0(Source_images,'/',current_image,'.jpg');
+      file.copy(current_image_dir, sub_class_dir)
+    }
+  } 
+}
+
+
+# Split data into train and validation (80/20)
+root ='Dataset/HAM_Sorted';
+target_dir = 'Dataset/HAM_Sorted_test';
+if (!dir.exists(target_dir)){
+  dir.create(target_dir)
+}
+for (class in available_classes){
+  sub_class_dir <- paste0(target_dir,'/',class,'/');
+  print(sub_class_dir)
+  if (!dir.exists(sub_class_dir)) {
+    dir.create(sub_class_dir)
+    class_files = list.files(paste0(root,'/',class,'/'))
+    total = length(class_files)
+    #move 20% to train dir
+    file.rename(paste0(root,'/',class,'/',class_files[1:as.integer((total*0.2))]),paste0(sub_class_dir,'/',class_files[1:as.integer((total*0.2))]))
+  }
+}
+
+```
+
+
+#Data augmentation for filling unbalanced class proportions JUST RUN ONCE IF YOU HACE THE DATA
+
+```{r}
+#Function to randomly adjust image parameters for augmentation
+augmentation_process <- function(x) {
+  randomness = sample(1:2, 1, replace = TRUE);
+  x<-transform_to_tensor(x);
+  if(randomness%%2){
+    x<- transform_adjust_contrast(x,1.3);
+    x<- transform_adjust_brightness(x,1.3);
+    x<- transform_adjust_brightness(x,0.7);
+  }
+  x<-torchvision::transform_random_horizontal_flip(x);
+  x<-torchvision::transform_random_rotation(x,c(0,270),resample=0,expand=FALSE,center=c(as.integer(dim(x)[3]/2),as.integer(dim(x)[2]/2)),fill=torch_int());
+  
+  dimx=dim(x)
+  y = torch_rand(dimx[2],dimx[3],dimx[1])
+  
+  y <- as_array(y);
+  x <- as_array(x);
+  
+  for(i in 1:dimx[1]){
+    y[,,i] <- x[i,,]   
+  }
+  y <- (y/max(y))
+  return(y)
+}
+available_classes = unique(df$dx);
+
+
+#Data augmentation for train (10500), 1500 each (70%)
+root = 'Dataset/HAM_Sorted';
+for (class in available_classes){
+  class_files = list.files(paste0(root,'/',class,'/'))
+  print(class)
+  print(length(class_files))
+  if(length(class_files)>1500){
+    number_to_quit = (length(class_files)-1500)
+    sapply(paste0(root,'/',class,'/',class_files[1:number_to_quit]), file.remove)
+  }
+  else{
+    j=1500;
+    current = length(list.files(paste0(root,'/',class,'/')))
+    while(current<1500){
+      for(file_current in class_files){
+        imagen = magick_loader(paste0(paste0(root,'/',class,'/',file_current)))
+        imagen = augmentation_process(imagen)
+        writeJPEG(imagen,paste0(root,'/',class,'/',file_current,'_','augmented',j,'.jpg'))
+        j=j-1;
+        current = length(list.files(paste0(root,'/',class,'/')))
+        if(current>=1500){
+          break
+        }
+      }
+    }
+  }
+}
+
+#Data augmentation for test (3150), 450 each (30%)
+root = 'Dataset/HAM_Sorted_test';
+for (class in available_classes){
+  class_files = list.files(paste0(root,'/',class,'/'))
+  print(class)
+  print(length(class_files))
+  if(length(class_files)>450){
+    number_to_quit = (length(class_files)-450)
+    sapply(paste0(root,'/',class,'/',class_files[1:number_to_quit]), file.remove)
+  }
+  else{
+    j=1000;
+    current = length(list.files(paste0(root,'/',class,'/')))
+    while(current<450){
+      for(file_current in class_files){
+        imagen = magick_loader(paste0(paste0(root,'/',class,'/',file_current)))
+        imagen = augmentation_process(imagen)
+        writeJPEG(imagen,paste0(root,'/',class,'/',file_current,'_','augmented',j,'.jpg'))
+        j=j-1;
+        current = length(list.files(paste0(root,'/',class,'/')))
+        if(current>=450){
+          break
+        }
+      }
+    }
+  }
+}
+```
+
+
+#Check new data proportions JUST RUN ONCE IF YOU HACE THE DATA
+
+```{r}
+target_dir_test <- 'Dataset/HAM_Sorted_test/'
+target_dir <- 'Dataset/HAM_Sorted/'
+classes <- list.dirs(target_dir, full.names = FALSE, recursive = FALSE)
+amount_classes_files_test <- c()
+amount_classes_files_train <- c()
+for (i in 1:length(classes)){
+  amount_classes_files_test[i] <- length(list.files(paste0(target_dir_test,classes[i])))
+  amount_classes_files_train[i] <- length(list.files(paste0(target_dir,classes[i])))
+}
+
+classes_test <- data.frame(class = classes, amount=amount_classes_files_test)
+classes_train <- data.frame(class = classes, amount=amount_classes_files_train)
+
+#Histogram for test files
+ggplot(classes_test, aes(x = class, y = amount)) +
+  geom_bar(stat = "identity", fill = "skyblue", color="black") +
+  geom_text(aes(label = amount), vjust = -0.5, color = "black", size = 3) +
+  labs(title = "Test files per class", x = "Testing files", y = "Quantity") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 1))+
+  ylim(0,1600)
+
+#Histogram for train files
+ggplot(classes_train, aes(x = class, y = amount)) +
+  geom_bar(stat = "identity", fill = "skyblue", color="black") +
+  geom_text(aes(label = amount), vjust = -0.5, color = "black", size = 3) +
+  labs(title = "Train files per class", x = "Training files", y = "Quantity") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 1))+
+  ylim(0,1600)
+
+```
+
+
+#Loading data into a dataset compatible with torch neural networks
+
+```{r}
+#Define custom compose transform function
+image_size = 64
+compose_substitute <- function(x) {
+  image_size = 64
+  mean_RGB = c(0.485, 0.456, 0.406)#Mean RGB image parameter
+  std_RGB = c(0.229, 0.224, 0.225) #Standard RGB image parameter  
+  #Image resize
+  #print(dim(x))
+  #cat("Minimo es ",min(x),"Maximo es ",max(x))
+  x<-torchvision::transform_to_tensor(x)
+  x<-torchvision::transform_resize(x,c(image_size,image_size),interpolation=0)
+  x<-torchvision::transform_random_horizontal_flip(x)
+  x<-torchvision::transform_normalize(x, mean=mean_RGB, std=std_RGB)
+  return(x)
+}
+
+# Create dataset from image folder using subfolders as classes and applying transforms
+root_train <-'Dataset/HAM_Sorted' ;
+root_test <-'Dataset/HAM_Sorted_test' ;
+skin_data_train <- image_folder_dataset(root=root_train,transform=compose_substitute)
+skin_data_test <- image_folder_dataset(root=root_test,transform=compose_substitute)
+
+# Create dataloader
+skin_train_dataloader <- dataloader(skin_data_train,batch_size = 128, shuffle=TRUE, num_workers = 2)
+skin_test_dataloader <- dataloader(skin_data_test,batch_size = 128,shuffle=TRUE,num_workers=2)
+
+#Visualize an image
+for (i in 1:7) {
+  image = array(runif(image_size * image_size * 3), dim = c(image_size, image_size, 3))
+  tensor_image = skin_train_dataloader$dataset[i*1500][[1]]
+  #tensor_image = transform_random_rotation(tensor_image,c(0,270),resample=0,expand=FALSE,center=c(image_size/2,image_size/2),fill=torch_int());
+  tensor_image = as_array(tensor_image)
+  for (j in 1:3){
+    image[,,j] = tensor_image[j,,]
+  }
+  image = (image - min(image)) / (max(image) - min(image)) #Norm value between 0 and 1
+  plot(1:10, type = "n", xlab = names(skin_train_dataloader$dataset[i*1500][[2]]), ylab = "", xlim = c(0, image_size), ylim = c(0, image_size))
+  rasterImage(image,1,1,image_size,image_size)
+}
+
+```
+
+
+#Neural network model creation architecture
+
+```{r}
+model_arch_best <- function() {
+  nn_sequential(
+    nn_conv2d(3, 64, kernel_size = 3, padding = 1),  
+    nn_relu(),
+    nn_max_pool2d(kernel_size = 2, stride = 2),
+    nn_batch_norm2d(64),
+    
+    nn_conv2d(64, 32, kernel_size = 3, padding = 1),  
+    nn_relu(),
+    nn_max_pool2d(kernel_size = 2, stride = 2),
+    nn_batch_norm2d(32),
+    
+    nn_conv2d(32, 16, kernel_size = 3, padding = 1),  
+    nn_relu(),
+    nn_max_pool2d(kernel_size = 2, stride = 2),
+    nn_batch_norm2d(16),
+    
+    nn_flatten(),
+    nn_linear(16 * 8 * 8, 64),  
+    nn_relu(),
+    nn_dropout(0.5),
+    
+    nn_linear(64, 32),
+    nn_relu(),
+    nn_dropout(0.5),
+    
+    nn_linear(32, 7) 
+  )
+}
+
+
+# Instantiate model
+model <- model_arch_best()
+```
+
+
+#Train model (validate model on each batch)
+
+```{r}
+# Get the actual prediction
+max_class <- function(tensor) {
+  dimen = dim(tensor);
+  tensor_index = torch_rand(dimen[1])
+  for(i in 1:dimen[1]){
+    t_row = tensor[i,];
+    tensor_index[i]= t_row$argmax();
+  }
+  return(tensor_index)
+}
+```
+
+```{r}
+#optimizer <- optim_rmsprop(model$parameters, lr = 0.001)
+optimizer <- optim_adam(model$parameters, lr = 0.001)
+criterion <- nn_cross_entropy_loss();
+criterion_val <- nn_cross_entropy_loss();
+train_losses <- c()  
+valid_losses <- c()
+
+accuracy_train <-c()
+accuracy_valid <-c()
+
+epochs = 30
+b_dim = 0;
+for (epoch in 1:epochs) {
+  
+  train_losses_epoch = c()
+  valid_losses_epoch = c()
+  
+  model$train()
+  i=1;
+  coro::loop(for (b in skin_train_dataloader){
+    optimizer$zero_grad()
+    output <- model(b$x)
+    #Get actual most confident class
+    actual_output <- max_class(output)
+    
+    
+    loss <- criterion(output, b$y)
+    b_dim=dim(b$y)
+    
+    loss$backward()
+    optimizer$step()
+    
+    train_losses <- c(train_losses, loss$item())
+    total_train = length(actual_output);
+    accuracy = as_array(sum(actual_output==b$y)/total_train)
+    accuracy_train = c(accuracy_train,accuracy)
+    if(!(i%%10)){
+      
+      print(paste0('Iteration ',i, ' accuracy_train: ', accuracy))
+    }
+    i=i+1;
+  })
+  
+  model$eval()
+  i=1;
+  coro::loop(for (b in skin_test_dataloader) {
+    
+    output <- model(b$x)
+    
+    actual_output <- max_class(output)
+    
+    loss <- criterion_val(output, b$y)
+    valid_losses <- c(valid_losses, loss$item())
+    total_valid = length(actual_output);
+    accuracy = as_array(sum(actual_output==b$y)/total_valid)
+    accuracy_valid = c(accuracy_valid,accuracy)
+    if(!(i%%10)){
+      print(paste0('Iteration ',i, ' accuracy_valid: ', accuracy))
+    }
+    i=i+1;
+  })
+  
+  print(paste0('Data amount per batch: ',b_dim[1]))
+  cat(sprintf("Loss at epoch %d: training: %3.3f, validation: %3.3f\n", epoch, mean(train_losses), mean(valid_losses)))
+}
+
+#Save model
+torch_save(model, "Skin_Cancer_Model_best.pth")
+write(train_losses,"model_best_Trainlosses.txt")
+write(valid_losses,"model_best_Validlosses.txt")
+write(accuracy_train,"model_best_TrainAcc.txt")
+write(accuracy_valid,"model_best_ValidAcc.txt")
+
+train_losses <- scan("model_best_Trainlosses.txt")
+valid_losses <- scan("model_best_Validlosses.txt")
+accuracy_train <-scan("model_best_TrainAcc.txt")
+accuracy_valid <-scan("model_best_ValidAcc.txt")
+
+#Check model performance during training 
+performance_train <- data.frame(iter = 1:length(train_losses),train_loss = train_losses, accuracy_train = accuracy_train)
+
+performance_valid <- data.frame(iter = 1:length(valid_losses),valid_loss = valid_losses,accuracy_valid = accuracy_valid)
+
+#Train performance
+ggplot(performance_train, aes(x = iter)) +
+  geom_line(aes(y = train_loss, color = "Train Loss"), linewidth = 1) +
+  geom_line(aes(y = accuracy_train, color = "Accuracy Train"), linewidth = 1) +
+  labs(title = "Train losses performance", x = "Iteration", y = "Progress") +
+  scale_color_manual(name = NULL,values = c("Train Loss" = "blue", "Accuracy Train" = "red")) +
+  theme_minimal() +
+  theme(legend.position = "top", legend.justification = "right")
+
+#Valid performance
+ggplot(performance_valid, aes(x = iter)) +
+  geom_line(aes(y = valid_loss, color = "Valid Loss"), linewidth = 1) +
+  geom_line(aes(y = accuracy_valid, color = "Accuracy Valid"), linewidth = 1) +
+  labs(title = "Valid losses performance", x = "Iteration", y = "Progress") +
+  scale_color_manual(name = NULL,values = c("Valid Loss" = "blue", "Accuracy Valid" = "red")) +
+  theme_minimal() +
+  theme(legend.position = "top", legend.justification = "right")
+```
+
+
+#Test model
+```{r}
+#Load model
+model_loaded <- torch_load("Modelos_30_Epocas/Skin_Cancer_Model_best2.pth")
+model_loaded$eval()
+
+```
+
+```{r}
+classes = skin_train_dataloader$dataset$classes #c("akiec",bcc","bkl","df","mel","nv","vasc")
+real_label <- c()
+model_output <- c()
+i <-0
+coro::loop(for (b in skin_test_dataloader) {
+  real_label <- c(real_label,as_array(b$y))
+  output <- as_array(max_class(model_loaded(b$x)))
+  model_output <- c(model_output,output)
+  print(i)
+  i=i+1
+})
+real_label_class = classes[real_label]
+model_output_class = classes[model_output]
+
+write(real_label,"real_label_class.txt")
+write(model_output,"model_output_class.txt")
+
+# Create confusion matrix using 
+matriz_confusion <- table(real_label_class, model_output_class)
+
+matriz_confusion_df <- as.data.frame(as.table(matriz_confusion))
+
+# Plot confusion matrix
+ggplot(matriz_confusion_df, aes(x = real_label_class, y = model_output_class, fill = Freq)) +
+  geom_tile() +
+  geom_text(aes(label = Freq), vjust = 1) +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  labs(title = "Confusion Matrix",
+       x = "Real class",
+       y = "Model output class")
+
+```
+
+```{r}
+n_class <- 7
+
+TP <- rep(0, n_class)
+TN <- rep(0, n_class)
+FP <- rep(0, n_class)
+FN <- rep(0, n_class)
+
+for (i in 1:n_class) {
+  TP[i] <- matriz_confusion[i, i]
+  FN[i] <- sum(matriz_confusion[i, ]) - TP[i]
+  FP[i] <- sum(matriz_confusion[, i]) - TP[i]
+  TN[i] <- sum(diag(matriz_confusion)) - TP[i] - FP[i] - FN[i]
+}
+
+# Get class performance
+accuracy_class <- c()
+precision_class <- c()
+sensitivity_class <- c()
+specificity_class <- c()
+for (i in 1:n_class) {
+  accuracy = (TP[i]+TN[i])/(TP[i]+TN[i]+FP[i]+FN[i])
+  precision = TP[i]/(TP[i]+FP[i])
+  sensitivity = TP[i]/(TP[i]+FN[i])
+  specificity = TN[i]/(TN[i]+FP[i])
+  
+  print(paste0("Class ", classes[i]," performance"))
+  accuracy_class = c(accuracy_class,accuracy)
+  precision_class = c(precision_class,precision)
+  sensitivity_class = c(sensitivity_class,sensitivity)
+  specificity_class = c(specificity_class,specificity)
+  
+  print(paste0("Accuracy: ",accuracy_class[i]*100,"%"))
+  print(paste0("Precision: ",precision_class[i]*100,"%"))
+  print(paste0("Sensitivity: ",sensitivity_class[i]*100,"%"))
+  print(paste0("Specificity: ",specificity_class[i]*100,"%"))
+  print("----------------------")
+}
+
+
+```
+
